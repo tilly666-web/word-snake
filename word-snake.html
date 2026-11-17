@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Showbiz Word Snake</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:#303033;font:16px system-ui,sans-serif}
+main{max-width:700px;margin:auto;padding:22px}
+header,.stats,.toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px}
+h1{font-size:clamp(22px,4vw,32px);margin:0}
+p{margin:0;color:#625d63}
+.stats,.prompt{margin-top:12px;padding:12px 16px;border:1px solid #ded8d5;border-radius:12px;background:#f5efec}
+.stats{font-size:14px;font-weight:700;background:#f3eef3}
+.prompt{text-align:center}
+.prompt p{font-size:13px}
+.word{font-size:clamp(23px,5vw,36px);font-weight:800;overflow-wrap:anywhere}
+.stage{position:relative;margin-top:12px}
+canvas{display:block;width:100%;background:white;outline:1px solid #ddd6d4;border-radius:12px}
+.overlay{position:absolute;z-index:2;inset:0;display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:12px;overflow:auto;background:#fffffff5;border-radius:12px}
+.overlay[hidden],.cards[hidden]{display:none}
+.overlay h2{margin:auto 0 0;font-size:clamp(18px,4vw,26px)}
+.overlay button{margin-bottom:auto}
+.overlay p{font-size:14px}
+.review{width:min(100%,420px);text-align:left;font-size:13px}
+.review h3{margin:0 0 4px;font-size:14px}
+.review ol{margin:0;padding-left:22px}
+.review li{padding:3px 2px;overflow-wrap:anywhere}
+.review li span{color:#863d48}
+.review li strong:last-child{color:#28613d}
+.stage[data-miss=true] canvas{outline:3px solid #b45968}
+.feedback[data-miss=true]{padding:7px 10px;border-radius:7px;background:#f7e2e6;color:#842f40;font-weight:700}
+.overlay button{justify-self:center}
+.cards{position:absolute;inset:0;pointer-events:none}
+.choice{position:absolute;display:grid;place-items:center;text-align:center;padding:1px;line-height:1.08;font-size:clamp(10px,2.4vw,17px);font-weight:750;border:1px solid #584e5a44;border-radius:7px;overflow:hidden;color:#292529}
+.feedback{min-height:2.6em;margin-top:10px;font-size:14px}
+button{font:inherit;font-weight:700;padding:9px 14px;border:1px solid #d6cbd7;border-radius:8px;background:#e5dce8;color:#37303b;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+.pad{display:grid;grid-template-columns:repeat(3,46px);justify-content:center;gap:5px;margin:0 0 12px}
+.pad button{touch-action:manipulation;padding:7px}
+.pad [data-dir=up]{grid-column:2}
+.pad [data-dir=left]{grid-column:1}
+.bank{padding:0;columns:2;list-style:none}
+.bank li{break-inside:avoid;padding:5px}
+details{margin-top:14px;color:#625d63}
+summary{cursor:pointer;color:#46384a}
+@media(max-width:480px){main{padding:14px}.stats{padding:9px 12px}.toolbar{font-size:13px}}
+</style>
+<main>
+<header><h1>Showbiz Word Snake</h1><button id="pause" disabled>Pause</button></header>
+<div class="stats"><span id="score">Score 0</span><span id="progress">Correct 0/10</span><span id="lives">Lives 3/3</span></div>
+<section class="prompt" aria-label="Current Word"><p>Current Word</p><div class="word" id="word" aria-live="polite">Ready to play</div></section>
+<div class="stage">
+<canvas id="board" width="576" height="480" aria-label="Snake board"></canvas>
+<div class="cards" id="choices" aria-label="Chinese answer choices"></div>
+<div class="overlay" id="overlay"><h2 id="title">Ready to play?</h2><p id="message">Get 10 answers right to win. A wrong answer costs one life and shortens the snake.</p><section class="review" id="review" hidden><h3>Mistake Review</h3><ol id="mistakes"></ol></section><button id="start">Start Game</button></div>
+</div>
+<p class="feedback" id="feedback" role="status">Use the arrow keys or the controls below to eat the correct translation.</p>
+<div class="pad" aria-label="Movement controls">
+<button data-dir="up" aria-label="Move up">↑</button><button data-dir="left" aria-label="Move left">←</button><button data-dir="down" aria-label="Move down">↓</button><button data-dir="right" aria-label="Move right">→</button>
+</div>
+<details><summary>Review all 100 terms</summary><ul class="bank" id="bank"></ul></details>
+</main>
+<script>
+'use strict';
+const vocabulary = `actor|男演员
+actress|女演员
+director|导演
+producer|制片人
+screenwriter|编剧
+cast|演员阵容
+crew|摄制组
+stunt double|特技替身
+extra|临时演员
+stand-in|走位替身
+agent|艺人经纪人
+publicist|宣传专员
+celebrity|名人
+co-star|联袂出演的演员
+lead role|主演角色
+supporting role|配角
+cameo|客串演出
+audition|试镜
+callback|复试
+rehearsal|排练
+script|剧本
+dialogue|对白
+monologue|独白
+plot|情节
+subplot|副线情节
+storyboard|分镜图
+scene|场景
+shot|镜头
+take|一次拍摄
+close-up|特写
+wide shot|远景镜头
+set|拍摄布景
+prop|道具
+wardrobe|戏服
+makeup artist|化妆师
+cinematographer|摄影指导
+lighting|灯光
+boom mic|吊杆麦克风
+green screen|绿幕
+visual effects|视觉特效
+animation|动画
+voice-over|旁白
+dubbing|配音
+subtitles|字幕
+soundtrack|影视配乐
+theme song|主题曲
+editing|剪辑
+post-production|后期制作
+credits|演职员名单
+bloopers|拍摄失误花絮
+trailer|预告片
+teaser|先导预告
+premiere|首映式
+red carpet|红毯
+film festival|电影节
+box office|票房
+blockbuster|卖座大片
+independent film|独立电影
+documentary|纪录片
+biopic|传记片
+sequel|续集
+prequel|前传
+reboot|重启作品
+remake|翻拍作品
+spin-off|衍生作品
+franchise|系列作品品牌
+adaptation|改编作品
+genre|类型
+comedy|喜剧
+thriller|惊悚片
+romantic comedy|爱情喜剧
+sitcom|情景喜剧
+reality show|真人秀
+talk show|脱口秀节目
+variety show|综艺节目
+host|主持人
+guest|嘉宾
+episode|单集
+season|一季节目
+pilot|试播集
+season finale|季终集
+cliffhanger|悬念式结尾
+ratings|收视率
+streaming|流媒体播放
+binge-watch|连续刷剧
+broadcast|播出
+network|电视广播网
+renewal|续订
+cancellation|取消制作
+release date|发行日期
+press tour|媒体巡回宣传
+press conference|新闻发布会
+paparazzi|狗仔队
+fan club|粉丝俱乐部
+fandom|粉丝群体
+spoiler|剧透
+review|评论
+critic|评论家
+nomination|提名
+acceptance speech|获奖感言`.split('\n').map(line => line.split('|'));
+
+const $ = id => document.getElementById(id);
+const canvas = $('board');
+const ctx = canvas.getContext('2d');
+const cols = 24, rows = 20, cell = 24, target = 10, interval = 170;
+const colors = ['#dfcbd1', '#cdd8df', '#e7d9c8'];
+const cardWidth = 6, cardHeight = 2;
+const vectors = {left:[-1,0], right:[1,0], up:[0,-1], down:[0,1]};
+const keys = {ArrowLeft:'left',a:'left',ArrowRight:'right',d:'right',ArrowUp:'up',w:'up',ArrowDown:'down',s:'down'};
+let snake, direction, nextDirection, answers, deck, lives, correct, state, timer;
+let mistakes = [], moveAfter = 0, audio;
+
+function unlockAudio() {
+  const Audio = window.AudioContext || window.webkitAudioContext;
+  if (!Audio) return;
+  try {
+    audio ??= new Audio();
+    if (audio.state !== 'running') audio.resume().catch(() => {});
+  } catch {
+    // Visual feedback remains available if the browser blocks audio.
+  }
+}
+
+function playMistakeSound() {
+  if (audio?.state !== 'running') return;
+  const tone = audio.createOscillator();
+  const volume = audio.createGain();
+  const now = audio.currentTime;
+  tone.type = 'triangle';
+  tone.frequency.setValueAtTime(340, now);
+  tone.frequency.setValueAtTime(190, now + 0.12);
+  volume.gain.setValueAtTime(0.001, now);
+  volume.gain.linearRampToValueAtTime(0.16, now + 0.025);
+  volume.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+  tone.connect(volume).connect(audio.destination);
+  tone.start(now);
+  tone.stop(now + 0.3);
+}
+
+function markMistake(active) {
+  $('board').parentElement.dataset.miss = String(active);
+  $('feedback').dataset.miss = String(active);
+}
+
+function showMistakes() {
+  $('mistakes').replaceChildren(...mistakes.map(({chosen, solution}) => {
+    const item = document.createElement('li');
+    const word = document.createElement('strong');
+    const wrong = document.createElement('span');
+    const right = document.createElement('strong');
+    word.textContent = solution[0];
+    wrong.textContent = chosen[1];
+    right.textContent = solution[1];
+    item.append(word, ' · Your answer: ', wrong, ' · Correct: ', right);
+    return item;
+  }));
+  $('review').hidden = mistakes.length === 0;
+}
+
+function shuffle(items) {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function at(a, b) { return a.x === b.x && a.y === b.y; }
+
+function resetSnake(length = 3) {
+  snake = Array.from({length}, (_, i) => ({x:(12 - i + cols) % cols, y:10}));
+  direction = null;
+  nextDirection = null;
+}
+
+function render() {
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#eae6e5';
+  for (let x = 0; x < cols; x++) {
+    for (let y = 0; y < rows; y++) ctx.fillRect(x * cell + 11, y * cell + 11, 2, 2);
+  }
+  for (const [i, part] of snake.entries()) {
+    const x = part.x * cell, y = part.y * cell;
+    ctx.fillStyle = i === 0 ? '#32704c' : '#72a681';
+    ctx.beginPath();
+    ctx.roundRect(x + 1, y + 1, 22, 22, 5);
+    ctx.fill();
+    if (i === 0) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x + 8, y + 7, 3, 3);
+      ctx.fillRect(x + 15, y + 7, 3, 3);
+    }
+  }
+}
+
+function updateStats() {
+  $('lives').textContent = `Lives ${lives}/3`;
+  $('score').textContent = `Score ${correct * 10}`;
+  $('progress').textContent = `Correct ${correct}/${target}`;
+}
+
+function covers(card, point) {
+  return point.x >= card.x && point.x < card.x + cardWidth &&
+    point.y >= card.y && point.y < card.y + cardHeight;
+}
+
+function overlaps(a, b) {
+  const gap = 4;
+  return Math.abs(a.x - b.x) < cardWidth + gap &&
+    Math.abs(a.y - b.y) < cardHeight + gap;
+}
+
+function findSeparatedCards(spots) {
+  for (const [i, first] of spots.entries()) {
+    const partners = spots.slice(i + 1).filter(spot => !overlaps(first, spot));
+    for (const [j, second] of partners.entries()) {
+      const third = partners.slice(j + 1).find(spot => !overlaps(second, spot));
+      if (third) return [first, second, third];
+    }
+  }
+  return null;
+}
+
+function placeAnswers() {
+  const spots = [];
+  for (let x = 1; x <= cols - cardWidth - 1; x++) {
+    for (let y = 1; y <= rows - cardHeight - 1; y++) {
+      const spot = {x, y};
+      const clearance = {x:x - 1, y:y - 1};
+      if (snake.some(part => covers(spot, part)) ||
+          (snake[0].x >= clearance.x && snake[0].x <= x + cardWidth &&
+           snake[0].y >= clearance.y && snake[0].y <= y + cardHeight)) continue;
+      spots.push(spot);
+    }
+  }
+  const available = shuffle(spots);
+  const cornerSpots = available.filter(({x, y}) =>
+    (x <= 4 || x >= 14) && (y <= 5 || y >= 14));
+  const placed = findSeparatedCards(cornerSpots) ?? findSeparatedCards(available);
+  $('choices').replaceChildren(...answers.map((answer, i) => {
+    Object.assign(answer, placed[i]);
+    const card = document.createElement('div');
+    card.className = 'choice';
+    card.textContent = answer.item[1];
+    card.style.left = `${answer.x / cols * 100}%`;
+    card.style.top = `${answer.y / rows * 100}%`;
+    card.style.width = `${cardWidth / cols * 100}%`;
+    card.style.height = `${cardHeight / rows * 100}%`;
+    card.style.background = colors[i];
+    return card;
+  }));
+}
+
+function question() {
+  const entry = deck.pop();
+  const options = shuffle([entry, ...shuffle(vocabulary.filter(item => item !== entry)).slice(0, 2)]);
+  answers = options.map(item => ({item, correct:item === entry}));
+  $('word').textContent = entry[0];
+  placeAnswers();
+}
+
+function showOverlay(title, message, action) {
+  $('review').hidden = true;
+  $('overlay').scrollTop = 0;
+  $('title').textContent = title;
+  $('message').textContent = message;
+  $('start').textContent = action;
+  $('overlay').hidden = false;
+  $('pause').disabled = true;
+}
+
+function play() {
+  state = 'playing';
+  $('overlay').hidden = true;
+  $('pause').disabled = false;
+  clearInterval(timer);
+  timer = setInterval(tick, interval);
+}
+
+function start() {
+  unlockAudio();
+  if (state === 'paused') {
+    play();
+    return;
+  }
+  mistakes = [];
+  moveAfter = 0;
+  markMistake(false);
+  lives = 3;
+  correct = 0;
+  deck = shuffle(vocabulary);
+  resetSnake();
+  updateStats();
+  question();
+  $('feedback').textContent = 'Use the arrow keys or the controls below to eat the correct translation.';
+  render();
+  play();
+}
+
+function finish(won) {
+  state = 'finished';
+  clearInterval(timer);
+  showOverlay(won ? 'You win!' : 'Game Over',
+    `Correct answers: ${correct}. Score: ${correct * 10}.`, 'Play Again');
+  showMistakes();
+}
+
+function tick() {
+  if (!nextDirection || performance.now() < moveAfter) return;
+  markMistake(false);
+  direction = nextDirection;
+  const [dx, dy] = vectors[direction];
+  const head = {x:(snake[0].x + dx + cols) % cols, y:(snake[0].y + dy + rows) % rows};
+  const answer = answers.find(tile => covers(tile, head));
+  const body = answer?.correct ? snake : snake.slice(0, -1);
+  if (body.some(part => at(part, head))) {
+    resetSnake(snake.length);
+    placeAnswers();
+    $('feedback').textContent = 'You hit your own tail. Choose a direction to move again.';
+    render();
+    return;
+  }
+  snake.unshift(head);
+  if (!answer?.correct) snake.pop();
+  if (answer?.correct) {
+    correct++;
+    $('feedback').textContent = `Correct! ${answer.item[0]} = ${answer.item[1]} (+10 points).`;
+  } else if (answer) {
+    lives--;
+    if (snake.length > 1) snake.pop();
+    const solution = answers.find(tile => tile.correct).item;
+    mistakes.push({chosen: answer.item, solution});
+    markMistake(true);
+    playMistakeSound();
+    moveAfter = performance.now() + 1100;
+    $('feedback').textContent = `Incorrect! You chose ${answer.item[1]}. Correct: ${solution[1]}. Lives left: ${lives}.`;
+  }
+  if (answer) {
+    updateStats();
+    if (correct === target || lives === 0) {
+      $('choices').replaceChildren();
+      render();
+      finish(correct === target);
+      return;
+    }
+    question();
+  }
+  render();
+}
+
+function steer(proposed) {
+  if (state !== 'playing' || performance.now() < moveAfter) return;
+  // A fresh snake extends left from its head.
+  if (!direction && proposed === 'left' && snake.length > 1) return;
+  if (direction && snake.length > 1) {
+    const [dx, dy] = vectors[direction];
+    const [px, py] = vectors[proposed];
+    if (px === -dx && py === -dy) return;
+  }
+  nextDirection = proposed;
+}
+
+function pause() {
+  if (state !== 'playing') return;
+  clearInterval(timer);
+  state = 'paused';
+  showOverlay('Paused', 'Resume when you are ready.', 'Resume');
+}
+
+$('start').addEventListener('click', start);
+$('pause').addEventListener('click', pause);
+document.querySelectorAll('[data-dir]').forEach(button => {
+  button.addEventListener('click', () => steer(button.dataset.dir));
+});
+document.addEventListener('keydown', event => {
+  const proposed = keys[event.key] || keys[event.key.toLowerCase()];
+  if (proposed && state === 'playing' && !event.altKey && !event.metaKey && !event.ctrlKey) {
+    event.preventDefault();
+    steer(proposed);
+  }
+});
+for (const [english, chinese] of vocabulary) {
+  const item = document.createElement('li');
+  item.textContent = `${english} · ${chinese}`;
+  $('bank').append(item);
+}
+resetSnake();
+answers = [];
+state = 'ready';
+render();
+</script>
+</html>
